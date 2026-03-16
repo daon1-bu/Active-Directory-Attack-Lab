@@ -1,0 +1,99 @@
+Step 1 — Dump LDAP data
+mkdir -p ldapdomaindump-output && ldapdomaindump -u 'MARVEL\administrator' -p 'Password123!' -o ldapdomaindump-output 10.0.2.14
+Step 2 — Open HTML report
+xdg-open ldapdomaindump-output/index.html
+Step 3 — Search for high-value terms
+grep -RiE "Domain Admins|Enterprise Admins|DNSAdmins|svc|backup|sql" ldapdomaindump-output
+Step 4 — Note interesting users / groups / hosts
+
+Examples:
+
+Service accounts
+
+Domain admins
+
+Server naming conventions
+
+Privileged groups
+
+Admin-accessible systems
+
+Step 5 — Move into deeper tools
+
+After this, I normally pivot into:
+
+bloodhound-python
+
+netexec ldap
+
+netexec smb
+
+rpcclient
+
+enum4linux-ng
+
+Manual LDAP searches if needed
+
+Example Follow-Up Tools After ldapdomaindump
+BloodHound collection
+bloodhound-python -u administrator -p 'Password123!' -d Marvel.local -ns 10.0.2.14 -c All
+NetExec LDAP enum
+nxc ldap 10.0.2.14 -u administrator -p 'Password123!'
+NetExec SMB enum
+nxc smb 10.0.2.14 -u administrator -p 'Password123!'
+Common Errors / Troubleshooting
+Invalid credentials / bind failed
+
+If the tool fails to authenticate:
+
+Re-check username format
+
+Try DOMAIN\user
+
+Try user@domain
+
+Verify password
+
+Confirm DC IP is correct
+
+Port 389 closed / filtered
+
+If LDAP port is blocked:
+
+nmap -Pn -p 389,636 10.0.2.14
+DNS or domain mismatch
+
+If the domain is not resolving correctly:
+
+Verify /etc/hosts if needed
+
+Confirm the DC is actually the correct LDAP server
+
+Check if you’re using the right domain name (Marvel.local vs MARVEL.local)
+
+Time skew issues
+
+Sometimes AD auth gets weird if the attacker VM time is badly off:
+
+date
+Notes for GitHub (Safe Version)
+
+For GitHub/public notes:
+
+Replace real passwords with placeholders
+
+Keep the domain as a lab domain
+
+Avoid posting anything from a real environment
+
+Do not upload actual dumped JSON/HTML from a live target
+
+Screenshot only lab-safe data
+
+Example public-safe command:
+
+ldapdomaindump -u 'LAB\\user' -p 'SuperSecretPassword!' -o ldapdomaindump-output 10.0.2.14
+
+Even better:
+
+ldapdomaindump -u 'LAB\\user' -p '<REDACTED_PASSWORD>' -o ldapdomaindump-output 10.0.2.14
