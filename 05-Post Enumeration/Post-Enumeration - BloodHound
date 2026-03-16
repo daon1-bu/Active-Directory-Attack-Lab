@@ -1,0 +1,444 @@
+
+Overview
+
+BloodHound is one of the main tools I use during post-enumeration in an Active Directory environment.
+After getting valid domain credentials, this tool helps map relationships between:
+
+Users
+
+Groups
+
+Computers
+
+Sessions
+
+ACLs / delegated rights
+
+Local admin rights
+
+Attack paths to privileged accounts
+
+Instead of manually reading raw LDAP data, BloodHound turns AD relationships into a graph so it is easier to identify:
+
+Privilege escalation paths
+
+Misconfigured permissions
+
+High-value targets
+
+Lateral movement opportunities
+
+Shortest path to Domain Admin
+
+Tool
+
+BloodHound
+
+bloodhound-python (Linux collector)
+
+SharpHound (Windows collector)
+
+Neo4j (backend database)
+
+Lab Context (Public Safe)
+
+Domain: LAB.local
+
+Collector Host: Kali Linux
+
+Target: Domain Controller / AD environment
+
+Credential Type: Valid domain user or privileged lab account
+
+Network: Internal lab network only
+
+Install / Verify
+Check if bloodhound-python is installed
+which bloodhound-python
+If not installed
+sudo apt update
+sudo apt install bloodhound -y
+
+Depending on Kali version, package names can vary.
+If bloodhound-python is missing, verify package contents:
+
+dpkg -L bloodhound | grep python
+Help menu
+bloodhound-python -h
+Neo4j Setup
+
+BloodHound uses Neo4j as the graph database.
+
+Start Neo4j
+sudo neo4j start
+Check status
+sudo neo4j status
+Stop Neo4j
+sudo neo4j stop
+Default local access
+
+Neo4j web console usually runs on:
+
+http://127.0.0.1:7474
+
+BloodHound app connects to:
+
+bolt://127.0.0.1:7687
+
+Start BloodHound GUI
+Launch BloodHound
+bloodhound
+
+If the command doesn’t launch:
+
+which bloodhound
+Main Collection Command (Linux)
+Full collection with DNS server specified
+bloodhound-python -u '<USERNAME>' -p '<PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+Example public-safe format
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+
+This is the main Linux collection command I use most often.
+
+Recommended Output Folder
+Create organized output folder
+mkdir -p bloodhound-output
+Run collection from inside the folder
+cd bloodhound-output
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+Common Collection Methods
+Collect everything
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+Session data only
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c Session
+Group memberships only
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c Group
+Local admin rights
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c LocalAdmin
+ACLs / delegated permissions
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c ACL
+Object properties
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c ObjectProps
+DCOM / PSRemote / RDP rights
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c DCOM,PSRemote,RDP
+Best Practical Command
+
+This is the one I’d remember first for lab / exam workflow:
+
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+If You Want Domain Controller by Hostname
+
+If DNS works correctly in the lab:
+
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -dc dc01.LAB.local -c All
+Zip Output Files
+
+BloodHound collection usually creates multiple JSON files.
+Zipping them makes import cleaner.
+
+Zip all JSON files
+zip bloodhound-collection.zip *.json
+If running inside output folder
+cd bloodhound-output
+zip bloodhound-collection.zip *.json
+Import Into BloodHound
+
+Inside the BloodHound GUI:
+
+Start Neo4j
+
+Launch BloodHound
+
+Log in with Neo4j credentials
+
+Click Upload Data
+
+Import:
+
+.json files
+or
+
+bloodhound-collection.zip
+
+Windows Collector (SharpHound)
+
+If collecting from a Windows domain-joined host, SharpHound.exe is commonly used.
+
+Basic collection
+.\SharpHound.exe -c All
+Session only
+.\SharpHound.exe -c Session
+Group + local admin + sessions
+.\SharpHound.exe -c Group,LocalAdmin,Session
+Output ZIP directly
+.\SharpHound.exe -c All --zipfilename bh-data.zip
+What I Look For First in BloodHound
+1. Shortest Path to Domain Admins
+
+Main built-in query:
+
+Find Shortest Paths to Domain Admins
+
+This is usually the first thing I run.
+
+2. High Value Targets
+
+Review:
+
+Domain Admins
+
+Enterprise Admins
+
+Domain Controllers
+
+Privileged service accounts
+
+Admin workstations
+
+File / SQL / management servers
+
+3. Outbound Object Control
+
+Look for:
+
+GenericAll
+
+GenericWrite
+
+WriteDACL
+
+WriteOwner
+
+AddMember
+
+ForceChangePassword
+
+AllExtendedRights
+
+These permissions often lead to:
+
+Group membership abuse
+
+Password reset abuse
+
+ACL abuse
+
+Delegation abuse
+
+Full object takeover
+
+4. Local Admin Rights
+
+Check if a lower-privileged user has:
+
+Local admin on servers
+
+Local admin on workstations
+
+Admin rights on systems where admins log in
+
+This can lead to:
+
+Credential theft
+
+Lateral movement
+
+Session hijacking opportunities
+
+5. Sessions
+
+Look for:
+
+Logged-in admins on reachable systems
+
+Helpdesk / IT users with sessions
+
+Admin sessions on workstations or file servers
+
+6. Kerberoast / AS-REP Targets
+
+BloodHound can highlight:
+
+Kerberoastable users
+
+AS-REP roastable users
+
+Useful for follow-up attacks:
+
+GetUserSPNs.py
+
+GetNPUsers.py
+
+Useful Built-In Queries
+
+Good first queries in BloodHound:
+
+Find Shortest Paths to Domain Admins
+
+Find Principals with DCSync Rights
+
+Find Workstations where Domain Users are Local Admin
+
+Find Servers where Domain Users are Local Admin
+
+Find Computers with Unconstrained Delegation
+
+Find Kerberoastable Users
+
+Find AS-REP Roastable Users
+
+Find High Value Targets
+
+Find all Domain Admins
+
+Find Users with Foreign Domain Group Membership
+
+Practical Workflow
+Step 1 — Start Neo4j
+sudo neo4j start
+Step 2 — Collect with bloodhound-python
+mkdir -p bloodhound-output
+cd bloodhound-output
+bloodhound-python -u 'labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+Step 3 — Zip results
+zip bloodhound-collection.zip *.json
+Step 4 — Launch BloodHound GUI
+bloodhound
+Step 5 — Import data
+
+Upload JSON or ZIP file
+
+Step 6 — Run first queries
+
+Priority:
+
+Shortest path to Domain Admins
+
+High Value Targets
+
+Local admin rights
+
+Sessions
+
+Dangerous ACLs
+
+Kerberoast / AS-REP candidates
+
+Follow-Up Attacks Based on BloodHound Findings
+
+Depending on what BloodHound shows, next steps may include:
+
+Password spraying
+
+Kerberoasting
+
+AS-REP roasting
+
+Pass-the-Hash
+
+Local admin lateral movement
+
+SMB / WinRM / PsExec validation
+
+ACL abuse
+
+RBCD / delegation abuse
+
+DCSync rights validation
+
+Troubleshooting
+DNS problems
+
+If BloodHound collection fails because of DNS:
+
+Verify domain controller DNS
+nslookup LAB.local <DC_IP>
+Verify host resolution
+nslookup dc01.LAB.local <DC_IP>
+Quick port check
+nmap -Pn -p 53,88,135,389,445,636,3268,3269 <DC_IP>
+
+Useful ports:
+
+53 = DNS
+
+88 = Kerberos
+
+135 = RPC
+
+389 = LDAP
+
+445 = SMB
+
+636 = LDAPS
+
+3268 = Global Catalog
+
+3269 = Global Catalog SSL
+
+Clock skew / Kerberos issues
+
+Check time on Kali:
+
+date
+
+If badly off, Kerberos-based operations can break.
+
+Authentication failures
+
+Try different username formats:
+
+bloodhound-python -u 'LAB\labuser' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+bloodhound-python -u 'labuser@LAB.local' -p '<REDACTED_PASSWORD>' -d LAB.local -ns <DC_IP> -c All
+Neo4j won’t start
+
+Check status:
+
+sudo neo4j status
+
+Restart:
+
+sudo neo4j restart
+Safe GitHub Notes
+
+For public GitHub:
+
+Replace real usernames with placeholders
+
+Replace real passwords with <REDACTED_PASSWORD>
+
+Replace real hostnames with:
+
+dc01.LAB.local
+
+ws01.LAB.local
+
+srv01.LAB.local
+
+Replace real IPs with:
+
+<DC_IP>
+
+<TARGET_IP>
+
+Do not upload raw JSON from real environments
+
+Do not post screenshots with real names, domains, or internal IPs
+
+Screenshot Ideas for GitHub
+
+Good screenshots to include:
+
+Successful bloodhound-python collection
+
+JSON files generated in folder
+
+BloodHound login screen
+
+Graph view of shortest path to Domain Admins
+
+Dangerous ACL edge example
+
+High Value Targets query result
+
+Session path / local admin path
