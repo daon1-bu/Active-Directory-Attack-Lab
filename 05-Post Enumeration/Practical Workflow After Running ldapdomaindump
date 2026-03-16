@@ -1,5 +1,5 @@
 Step 1 — Dump LDAP data
-mkdir -p ldapdomaindump-output && ldapdomaindump -u 'MARVEL\administrator' -p 'Password123!' -o ldapdomaindump-output 10.0.2.14
+mkdir -p ldapdomaindump-output && ldapdomaindump -u 'DOMAIN NAME\administrator' -p 'Password123!' -o ldapdomaindump-output 00.2.00
 Step 2 — Open HTML report
 xdg-open ldapdomaindump-output/index.html
 Step 3 — Search for high-value terms
@@ -36,11 +36,11 @@ Manual LDAP searches if needed
 
 Example Follow-Up Tools After ldapdomaindump
 BloodHound collection
-bloodhound-python -u administrator -p 'Password123!' -d Marvel.local -ns 10.0.2.14 -c All
+bloodhound-python -u administrator -p 'Password123!' -d DOMAIN NAME.local -ns 00.2.00 -c All
 NetExec LDAP enum
-nxc ldap 10.0.2.14 -u administrator -p 'Password123!'
+nxc ldap 00.2.00 -u administrator -p 'Password123!'
 NetExec SMB enum
-nxc smb 10.0.2.14 -u administrator -p 'Password123!'
+nxc smb 00.2.00 -u administrator -p 'Password123!'
 Common Errors / Troubleshooting
 Invalid credentials / bind failed
 
@@ -60,7 +60,7 @@ Port 389 closed / filtered
 
 If LDAP port is blocked:
 
-nmap -Pn -p 389,636 10.0.2.14
+nmap -Pn -p 389,636 00.2.00
 DNS or domain mismatch
 
 If the domain is not resolving correctly:
@@ -69,7 +69,7 @@ Verify /etc/hosts if needed
 
 Confirm the DC is actually the correct LDAP server
 
-Check if you’re using the right domain name (Marvel.local vs MARVEL.local)
+Check if you’re using the right domain name (DOMAIN NAME.local vs DOMAIN NAME.local)
 
 Time skew issues
 
@@ -92,8 +92,8 @@ Screenshot only lab-safe data
 
 Example public-safe command:
 
-ldapdomaindump -u 'LAB\\user' -p 'SuperSecretPassword!' -o ldapdomaindump-output 10.0.2.14
+ldapdomaindump -u 'LAB\\user' -p 'SuperSecretPassword!' -o ldapdomaindump-output 00.2.00
 
 Even better:
 
-ldapdomaindump -u 'LAB\\user' -p '<REDACTED_PASSWORD>' -o ldapdomaindump-output 10.0.2.14
+ldapdomaindump -u 'LAB\\user' -p '<REDACTED_PASSWORD>' -o ldapdomaindump-output 00.2.00
